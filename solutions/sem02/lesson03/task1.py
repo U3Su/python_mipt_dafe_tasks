@@ -29,6 +29,6 @@ def get_mutual_l2_distances_vectorized(
 ) -> np.ndarray:
     if len(lhs[0]) != len(rhs[0]):
         raise ShapeMismatchError
-    diff_coord = lhs[:, np.newaxis, :] - rhs[np.newaxis, :, :]git 
+    diff_coord = lhs[:, np.newaxis, :] - rhs[np.newaxis, :, :]
     summ_coord = np.sum(diff_coord**2, 2)
-    return summ_coord**0.
+    return summ_coord**0.5

@@ -1,141 +1,111 @@
+import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 from IPython.display import HTML
 from matplotlib.animation import FuncAnimation
 
 
-def animate_wave_algorithm(
-    maze: np.ndarray,
-    start: tuple[int, int],
-    end: tuple[int, int],
-    save_path: str = "",
+def create_modulation_animation(
+    modulation, fc, num_frames, plot_duration, time_step=0.001, animation_step=0.01, save_path=""
 ) -> FuncAnimation:
-    def solution_wave(maze, start, end):
-        height, width = maze.shape
-        distances = np.full(maze.shape, fill_value=-1, dtype=int)
-        distances[start] = 0
-        history = [distances.copy()]
-        cur_wave = [start]
-        moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        while cur_wave:
-            next_wave = []
-            for y, x in cur_wave:
-                cur_value = distances[y, x]
-                for move_y, move_x in moves:
-                    new_y = y + move_y
-                    new_x = x + move_x
-                    if not (0 <= new_y < height and 0 <= new_x < width):
-                        continue
-                    if maze[new_y, new_x] != 1:
-                        continue
-                    if distances[new_y, new_x] != -1:
-                        continue
-                    distances[new_y, new_x] = cur_value + 1
-                    next_wave.append((new_y, new_x))
-            history.append(distances.copy())
-            if distances[end] != -1:
-                break
-            cur_wave = next_wave
-        return distances, history
 
-    def path_recovery(distances, start, end):
-        height, width = distances.shape
-        moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        path = [end]
-        cur_cell = end
-        while cur_cell != start:
-            cur_value = distances[cur_cell]
-            for move_y, move_x in moves:
-                new_y = cur_cell[0] + move_y
-                new_x = cur_cell[1] + move_x
-                if not (0 <= new_y < height and 0 <= new_x < width):
-                    continue
-                if distances[new_y, new_x] == cur_value - 1:
-                    cur_cell = (new_y, new_x)
-                    path.append(cur_cell)
-                    break
-        path.reverse()
-        return path
+    fig, ax = plt.subplots(figsize=(12, 6))
 
-    def build_frames(history, path, path_marker):
-        frames = list(history)
-        if path:
-            state = history[-1].copy()
-            for cell in path:
-                state[cell] = path_marker
-                frames.append(state.copy())
-        return frames
+    ax.set_xlim(0, plot_duration)
+    ax.set_ylim(-1.5, 1.5)
+    ax.set_xlabel("Zeit (time) (s)", fontsize=12)
+    ax.set_ylabel("Amplitude", fontsize=12)
+    ax.set_title("Amplitudenmoduliertes Signal\n(Amplitude-modulated signal)", fontsize=14)
+    ax.grid(True, alpha=0.3)
+    ax.axhline(y=0, color="k", linestyle="-", linewidth=0.5)
 
-    distances, history = solution_wave(maze, start, end)
-    path_found = distances[end] != -1
+    frame_time = np.arange(0, plot_duration, time_step)
 
-    if path_found:
-        path = path_recovery(distances, start, end)
-    else:
-        path = []
-        print("Путь не найден")
+    (line_signal,) = ax.plot(
+        frame_time,
+        np.zeros_like(frame_time),
+        color="b",
+        linestyle="-",
+        linewidth=1.5,
+        label="Moduliertes Signal (Modulated signal)",
+    )
 
-    path_marker = distances.max() + 2
-    frames = build_frames(history, path, path_marker)
+    (line_positive,) = ax.plot(
+        frame_time,
+        np.zeros_like(frame_time),
+        color="r",
+        linestyle="--",
+        linewidth=1,
+        alpha=0.7,
+        label="Hüllkurve (Envelope) (+M(t))",
+    )
 
-    figure, axis = plt.subplots(figsize=(8, 8))
-    height, width = maze.shape
+    (line_negative,) = ax.plot(
+        frame_time,
+        np.zeros_like(frame_time),
+        color="r",
+        linestyle="--",
+        linewidth=1,
+        alpha=0.7,
+        label="Hüllkurve (Envelope) (-M(t))",
+    )
 
-    axis.imshow(maze, cmap="gray", alpha=0.1)
+    ax.legend(loc="upper right")
 
-    texts = [
-        [axis.text(x, y, "", ha="center", va="center") for x in range(width)] for y in range(height)
-    ]
+    def update(frame: int) -> tuple:
+        start_time = frame * animation_step
+        current_time = start_time + frame_time
 
-    def update(frame_id):
-        curr_frame = frames[frame_id]
-        for y in range(height):
-            for x in range(width):
-                val = curr_frame[y, x]
-                if val == -1:
-                    texts[y][x].set_text("")
-                elif val == path_marker:
-                    texts[y][x].set_text("*")
-                    texts[y][x].set_color("red")
-                else:
-                    texts[y][x].set_text(str(val))
-                    texts[y][x].set_color("black")
-        return [t for row in texts for t in row]
+        if modulation is None:
+            M_t = np.ones_like(current_time)
+        else:
+            M_t = modulation(current_time)
 
-    axis.set_xticks(np.arange(width + 1) - 0.5, minor=True)
-    axis.set_yticks(np.arange(height + 1) - 0.5, minor=True)
-    axis.grid(which="minor", color="black", linestyle="-", linewidth=0.5)
-    axis.set_xticks([])
-    axis.set_yticks([])
+        carrier = np.sin(2 * np.pi * fc * current_time)
 
-    animation = FuncAnimation(
-        figure,
-        update,
-        frames=len(frames),
-        interval=200,
-        blit=True,
+        if modulation is None:
+            s_t = carrier
+        else:
+            s_t = M_t * carrier
+
+        line_signal.set_ydata(s_t)
+        line_positive.set_ydata(M_t)
+        line_negative.set_ydata(-M_t)
+
+        ax.set_title("Amplitudenmoduliertes Signal\n(Amplitude-modulated signal)", fontsize=14)
+
+        return (line_signal, line_positive, line_negative)
+
+    anim = animation.FuncAnimation(
+        fig, update, frames=num_frames, interval=20, blit=True, repeat=True
     )
 
     if save_path:
-        animation.save(save_path, writer="pillow", fps=5)
+        anim.save(save_path, writer="pillow", fps=20)
 
-    return animation
+    plt.show()
+    return anim
 
 
 if __name__ == "__main__":
-    maze = np.array(
-        [
-            [0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 1, 1, 1, 0],
-            [1, 1, 0, 1, 0, 1, 0],
-            [0, 0, 1, 1, 0, 1, 0],
-            [0, 0, 0, 0, 0, 1, 0],
-            [1, 1, 1, 1, 1, 1, 0],
-            [0, 0, 0, 0, 0, 0, 0],
-        ]
+
+    def modulation_function(t):
+        return np.cos(t * 6)
+
+    num_frames = 100
+    plot_duration = np.pi / 2
+    time_step = 0.001
+    animation_step = np.pi / 200
+    fc = 50
+    save_path_with_modulation = "modulated_signal.gif"
+
+    animation = create_modulation_animation(
+        modulation=modulation_function,
+        fc=fc,
+        num_frames=num_frames,
+        plot_duration=plot_duration,
+        time_step=time_step,
+        animation_step=animation_step,
+        save_path=save_path_with_modulation,
     )
-    start = (2, 0)
-    end = (5, 0)
-    save_path = "labyrinth.gif"
-    animation = animate_wave_algorithm(maze, start, end, save_path)
     HTML(animation.to_jshtml())
